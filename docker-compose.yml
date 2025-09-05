@@ -61,5 +61,37 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: policy-app
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # RabbitMQ connection used by the app
+      RABBIT_URL: "amqp://admin:admin@rabbitmq:5672"
+      # Postgres connection variables used by the app
+      PGHOST: "policy-postgres"
+      PGPORT: "5432"
+      PGUSER: "postgres"
+      PGPASSWORD: "postgres"
+      PGDATABASE: "policydb"
+      PORT: "3000"
+    # For development, uncomment the volume below to mount source into the container
+    # volumes:
+    #   - ./:/usr/src/app
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
 volumes:
   rabbitmq_data:

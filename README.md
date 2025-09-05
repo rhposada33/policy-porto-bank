@@ -89,30 +89,96 @@ Observação: a API deve retornar 202 para processos assíncronos com um campo `
 - Cobrança / Contabilidade
   - Consumidores de eventos `policy.issued` para gerar títulos e lançamentos contábeis.
 
-## Execução local e scripts
+## Como executar (Docker recomendado)
 
-Repositório usa NestJS; scripts principais estão em `package.json`.
+Siga as instruções abaixo — priorizamos o uso de Docker/Docker Compose para reproduzibilidade e facilidade de setup local/CI.
 
-Instalar dependências:
+### 1) Executar com Docker (recomendado)
+
+Este repositório inclui um `docker-compose.yml` que sobe a aplicação junto com dependências essenciais (Postgres e RabbitMQ). Use-o para rodar a stack completa rapidamente.
+
+```bash
+# da raiz do projeto
+docker-compose up -d --build
+
+# verifique containers
+docker-compose ps
+
+# acompanhe logs do serviço de aplicação (ex.: service name `app` ou `policy-app`)
+docker-compose logs -f app
+```
+
+Notas:
+- Para limpar volumes e recomeçar:
+
+```bash
+docker-compose down -v
+```
+
+- Para desenvolvimento com live-reload dentro do container, habilite o volume de código no `docker-compose.yml` (comentado por padrão) e execute `docker-compose up --build`.
+
+### 2) Variáveis de ambiente para o ambiente Docker
+
+O compose já define valores sensíveis padrão para desenvolvimento, mas você pode sobrescrevê-los no ambiente ou usando um arquivo `.env` na raiz. Algumas variáveis úteis:
+
+- JWT_SECRET (padrão de dev: `dev-secret`)
+- DATABASE_URL / POSTGRES_USER / POSTGRES_PASSWORD (conforme `docker-compose.yml`)
+
+Exemplo rápido para exportar antes de subir (opcional):
+
+```bash
+export JWT_SECRET=dev-secret
+```
+
+### 3) Testes e comandos dentro do container
+
+Para executar scripts/npm dentro do container (útil quando não quer instalar localmente):
+
+```bash
+# executar um comando npm no container em execução
+docker compose exec app npm run test
+```
+
+---
+
+## Executar localmente (opcional — para desenvolvimento sem Docker)
+
+Se preferir rodar a aplicação diretamente na sua máquina (Node.js instalado), siga estes passos:
+
+1) Instale dependências
 
 ```bash
 npm install
 ```
 
-Desenvolvimento (hot-reload):
+2) Configure variáveis de ambiente (exemplo):
+
+```bash
+export JWT_SECRET=dev-secret
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/policy
+export RABBITMQ_URL=amqp://guest:guest@localhost:5672
+```
+
+3) Suba Postgres e RabbitMQ (recomendado com Docker Compose)
+
+```bash
+docker-compose up -d postgres rabbitmq
+```
+
+4) Executar em modo desenvolvimento (hot-reload)
 
 ```bash
 npm run start:dev
 ```
 
-Build para produção:
+5) Build para produção
 
 ```bash
 npm run build
 npm run start:prod
 ```
 
-Testes:
+6) Testes
 
 ```bash
 npm run test        # unit
@@ -120,7 +186,7 @@ npm run test:e2e    # e2e
 npm run test:cov    # coverage
 ```
 
-Lint/format:
+7) Lint / format
 
 ```bash
 npm run lint
