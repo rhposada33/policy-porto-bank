@@ -3,6 +3,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PolicyModule } from './policy/policy.module';
+import { OutboxDispatcherService } from './outbox/outbox.service';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { PolicyModule } from './policy/policy.module';
   PolicyModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, OutboxDispatcherService],
 })
 export class AppModule {}
