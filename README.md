@@ -164,7 +164,7 @@ npm run format
 - Testes de integração contra uma stack local (Postgres + RabbitMQ) usando containers.
 - Contrato: testes automatizados entre produtor/consumidor (Pact).
 
-## Próximos passos (roadmap técnico sugerido)
+## roadmap técnico sugerido
 
 1. Implementar Outbox e mecanismo de publicação garantida.
 2. Criar workers de orquestração (concessão, precificação, confirmação) com idempotência.
@@ -178,30 +178,30 @@ npm run format
 - `src/` — código da aplicação (controllers, modules, serviços, workers).
 - `rabbit/definitions.json` — definições de filas/eventos.
 
-## Gateway Auth (dev) and test curls
+## Gateway Auth (dev) e curls de teste
 
-This repository includes a minimal, optional JWT guard to protect the API for local testing. The guard expects either:
-- an HS256 token verified with environment variable `JWT_SECRET` (default: `dev-secret`), or
-- an RS256 token verified with `JWT_PUBLIC_KEY`.
+Este repositório inclui um guard JWT mínimo e opcional para proteger a API em testes locais. O guard aceita:
+- um token HS256 verificado com a variável de ambiente `JWT_SECRET` (padrão: `dev-secret`), ou
+- um token RS256 verificado com `JWT_PUBLIC_KEY`.
 
-For convenience there's a tiny helper to generate an HS256 token for tests.
+Para conveniência há um pequeno helper para gerar um token HS256 para testes.
 
-Create a token (dev):
+Criar um token (dev):
 
 ```bash
-# generate a token with subject and role claims
+# gerar um token com claims subject e role
 node -e "console.log(require('jsonwebtoken').sign({ sub: 'test-user', role: 'developer' }, process.env.JWT_SECRET||'dev-secret', { algorithm: 'HS256', expiresIn: '1h' }))"
 ```
 
-Curl examples
+Exemplos de curl
 
-# 1) Health (no auth)
+# 1) Health (sem auth)
 curl -v http://localhost:3000/
 
-# 2) POST issue without token (should 401)
+# 2) POST issue sem token (deve retornar 401)
 curl -v -H "Content-Type: application/json" -X POST http://localhost:3000/policy/issue -d '{"holder":"Alice","amount":100}'
 
-# 3) POST issue with token (replace <TOKEN> with output from generator)
+# 3) POST issue com token (substitua <TOKEN> pelo token gerado)
 curl -v -H "Content-Type: application/json" -H "Authorization: Bearer <TOKEN>" -X POST http://localhost:3000/policy/issue -d '{"holder":"Alice","amount":100,"productCode":"FIANCA"}'
 
 
