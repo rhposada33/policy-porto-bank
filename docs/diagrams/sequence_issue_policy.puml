@@ -1,0 +1,37 @@
+@startuml
+title Sequência: Emissão de Apólice (simplificada)
+
+actor Cliente
+participant "API (NestJS)" as API
+participant "Postgres (DB)" as DB
+participant "Outbox" as OUT
+participant "RabbitMQ" as MQ
+participant "Worker Orquestrador" as WK
+participant "Concessão de Crédito" as CREDIT
+participant "Precificação" as PRICING
+participant "Cobrança / Contabilidade" as BILL
+
+Cliente -> API : POST /policies (dados do pedido)
+API -> API : Validar payload (schema + regras básicas)
+API -> DB : INSERT policy(status=DRRAFT) [transaction]
+API -> OUT : Insert outbox(policy.issue.requested)
+API -> DB : COMMIT
+OUT -> MQ : Publish policy.issue.requested
+API --> Cliente : 202 Accepted + correlationId
+
+MQ -> WK : Deliver policy.issue.requested
+WK -> CREDIT : Check credit (sync, timeout/cb)
+alt crédito aprovado
+  WK -> PRICING : Get price
+  alt price OK
+    WK -> DB : Update policy -> ISSUED
+    WK -> MQ : Publish policy.issued
+    MQ -> BILL : policy.issued (billing/accounting)
+  else price erro
+    WK -> MQ : Publish policy.issue.failed
+  end
+else crédito negado
+  WK -> MQ : Publish policy.issue.failed
+end
+
+@enduml

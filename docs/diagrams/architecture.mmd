@@ -1,0 +1,64 @@
+flowchart LR
+  subgraph Cliente
+    C[Client / Canal]
+  end
+
+  subgraph API
+    A[API Gateway / NestJS]
+  end
+
+  subgraph Outbox
+    O[Transactional Outbox]
+  end
+
+  subgraph Broker
+    R[RabbitMQ]
+    R1[queue: policy.issue.<product>]
+    DLQ[Dead Letter Queue]
+  end
+
+  subgraph Workers
+    W[Orchestrator Worker]
+  end
+
+  subgraph DB
+    D[(Postgres)]
+  end
+
+  subgraph Externos
+    CR[Concessão de Crédito]
+    PR[Precificação]
+    BI[Cobrança]
+    AC[Contabilidade]
+  end
+
+  subgraph Observability
+    M[Prometheus]
+    J[Jaeger]
+    L[Logs JSON]
+  end
+
+  C --> A
+  A --> D[Create draft]
+  A --> O[Write outbox entry]
+  O --> R[Publish after commit]
+  R --> R1
+  R1 --> W[policy.issue.requested]
+  W --> CR
+  W --> PR
+  W --> D[Update ISSUED]
+  W --> R[Publish policy.issued]
+  R --> BI
+  R --> AC
+
+  %% Resilience and queue patterns
+  note right of R1
+    - Partition queues by product (\n      policy.issue.FIANCA, policy.issue.CAPITAL)
+    - Consumers scale per queue
+    - Retries with backoff; on exceed -> DLQ
+  end note
+
+  R1 -.-> DLQ
+  A --> M
+  W --> J
+  A --> L

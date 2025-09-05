@@ -1,0 +1,33 @@
+sequenceDiagram
+  participant Cliente
+  participant API as "API (NestJS)"
+  participant DB as "Postgres (DB)"
+  participant Outbox
+  participant MQ as "RabbitMQ"
+  participant Worker as "Worker Orquestrador"
+  participant Credit as "Concessão de Crédito"
+  participant Pricing as "Precificação"
+  participant Billing as "Cobrança/Contabilidade"
+
+  Cliente->>API: POST /policies (pedido)
+  API->>API: validar payload
+  API->>DB: INSERT policy (status=DRAFT)
+  API->>Outbox: INSERT outbox entry (policy.issue.requested)
+  API->>DB: COMMIT
+  Outbox->>MQ: publicar policy.issue.requested
+  API-->>Cliente: 202 Accepted + correlationId
+
+  MQ->>Worker: deliver policy.issue.requested
+  Worker->>Credit: check credit (sync)
+  alt crédito aprovado
+    Worker->>Pricing: request price
+    alt price OK
+      Worker->>DB: update policy -> ISSUED
+      Worker->>MQ: publish policy.issued
+      MQ->>Billing: deliver policy.issued
+    else price erro
+      Worker->>MQ: publish policy.issue.failed
+    end
+  else crédito negado
+    Worker->>MQ: publish policy.issue.failed
+  end

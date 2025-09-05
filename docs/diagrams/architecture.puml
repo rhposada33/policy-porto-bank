@@ -1,0 +1,54 @@
+@startuml
+' Porto Bank - Plataforma de Emissão - Arquitetura
+!theme plain
+
+actor Cliente as Client
+
+package "API / Gateway" {
+  [API (NestJS)] as API
+}
+
+package "Workers / Processors" {
+  [Orchestrator Worker] as Worker
+}
+
+cloud "Broker" {
+  [RabbitMQ]
+}
+
+database "Postgres (Domain)" as DB
+
+node "Outbox" as Outbox
+
+package "Serviços Externos" {
+  [Concessão de Crédito] as Credit
+  [Precificação] as Pricing
+  [Cobrança] as Billing
+  [Contabilidade] as Accounting
+}
+
+package "Observability" {
+  [Prometheus]
+  [Jaeger]
+  [Logs (ELK/Fluentd)]
+}
+
+' Flows
+Client -> API : POST /policies\n(correlationId)
+API -> DB : Create draft policy (transaction)
+API -> Outbox : Enqueue policy.issue.requested
+Outbox -> RabbitMQ : Publish (after DB commit)
+RabbitMQ -> Worker : policy.issue.requested (consume)
+Worker -> Credit : Check credit (HTTP/gRPC)\n(timeout + circuit-breaker)
+Worker -> Pricing : Fetch pricing
+Worker -> DB : Update policy status = ISSUED
+Worker -> RabbitMQ : Publish policy.issued
+RabbitMQ -> Billing : policy.issued (consumer)
+RabbitMQ -> Accounting : policy.issued (consumer)
+
+' Observability
+API ..> Prometheus : metrics
+Worker ..> Jaeger : traces
+API ..> Logs : structured logs
+
+@enduml
