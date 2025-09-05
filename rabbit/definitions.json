@@ -1,0 +1,18 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "queues": [
+    {
+      "name": "policy_queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [],
+  "bindings": []
+}

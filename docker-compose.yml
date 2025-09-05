@@ -11,13 +11,37 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: "admin"
       RABBITMQ_DEFAULT_PASS: "admin"
+  # Do not load definitions via erl args (can conflict with env user creation).
+  # We'll import definitions via the management HTTP API after RabbitMQ becomes healthy.
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbit/definitions.json:/etc/rabbitmq/definitions.json:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "status"]
       interval: 30s
       timeout: 10s
       retries: 5
+
+  rabbitmq-init:
+    image: curlimages/curl:8.3.0
+    depends_on:
+      - rabbitmq
+    restart: "no"
+    volumes:
+      - ./rabbit/definitions.json:/defs/definitions.json:ro
+    entrypoint: ["/bin/sh","-c"]
+    command: |
+      i=1;
+      while [ $$i -le 60 ]; do
+        if curl -s -u admin:admin http://rabbitmq:15672/api/health | grep -q "ok"; then
+          echo "rabbit ready, importing definitions";
+          curl -s -u admin:admin -H "Content-Type: application/json" -XPUT http://rabbitmq:15672/api/definitions -d @/defs/definitions.json && echo "imported" && exit 0;
+        fi;
+        echo "waiting for rabbit... ($$i)";
+        sleep 1;
+        i=$$(($$i + 1));
+      done;
+      echo "failed to import definitions: rabbit did not become healthy"; exit 1;
 
 volumes:
   rabbitmq_data:

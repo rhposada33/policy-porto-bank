@@ -1,9 +1,26 @@
 import { Module } from '@nestjs/common';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PolicyModule } from './policy/policy.module';
 
 @Module({
-  imports: [],
+  imports: [
+    ClientsModule.register([
+      {
+        name: 'POLICY_RMQ_CLIENT',
+        transport: Transport.RMQ,
+        options: {
+          urls: ['amqp://admin:admin@localhost:5672'],
+          queue: 'policy_queue',
+          queueOptions: {
+            durable: true,
+          },
+        },
+      },
+    ]),
+  PolicyModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
