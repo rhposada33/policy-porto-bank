@@ -178,6 +178,33 @@ npm run format
 - `src/` — código da aplicação (controllers, modules, serviços, workers).
 - `rabbit/definitions.json` — definições de filas/eventos.
 
+## Gateway Auth (dev) and test curls
+
+This repository includes a minimal, optional JWT guard to protect the API for local testing. The guard expects either:
+- an HS256 token verified with environment variable `JWT_SECRET` (default: `dev-secret`), or
+- an RS256 token verified with `JWT_PUBLIC_KEY`.
+
+For convenience there's a tiny helper to generate an HS256 token for tests.
+
+Create a token (dev):
+
+```bash
+# generate a token with subject and role claims
+node -e "console.log(require('jsonwebtoken').sign({ sub: 'test-user', role: 'developer' }, process.env.JWT_SECRET||'dev-secret', { algorithm: 'HS256', expiresIn: '1h' }))"
+```
+
+Curl examples
+
+# 1) Health (no auth)
+curl -v http://localhost:3000/
+
+# 2) POST issue without token (should 401)
+curl -v -H "Content-Type: application/json" -X POST http://localhost:3000/policy/issue -d '{"holder":"Alice","amount":100}'
+
+# 3) POST issue with token (replace <TOKEN> with output from generator)
+curl -v -H "Content-Type: application/json" -H "Authorization: Bearer <TOKEN>" -X POST http://localhost:3000/policy/issue -d '{"holder":"Alice","amount":100,"productCode":"FIANCA"}'
+
+
 ## Contato / Contribuição
 
 Se quiser contribuir, abra issues e PRs com foco pequeno e testável. Inclua descrições de regressões e cenários de teste.
