@@ -89,10 +89,6 @@ Observação: a API deve retornar 202 para processos assíncronos com um campo `
 - Cobrança / Contabilidade
   - Consumidores de eventos `policy.issued` para gerar títulos e lançamentos contábeis.
 
-Recomendações:
-- Usar circuit-breaker (ex: opossum, resilience4j) e bulkhead para isolar falhas.
-- Validar contratos (OpenAPI / protobuf) e ter testes de contrato automatizados (Pact, e2e em staging).
-
 ## Execução local e scripts
 
 Repositório usa NestJS; scripts principais estão em `package.json`.
