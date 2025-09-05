@@ -43,5 +43,23 @@ services:
       done;
       echo "failed to import definitions: rabbit did not become healthy"; exit 1;
 
+  postgres:
+    image: postgres:15
+    container_name: policy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "policydb"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d policydb -h localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   rabbitmq_data:

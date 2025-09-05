@@ -1,15 +1,28 @@
-import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
 import * as amqp from 'amqplib';
+import { Pool } from 'pg';
 
 @Injectable()
 export class PolicyService {
   private rabbitUrl = process.env.RABBIT_URL || 'amqp://admin:admin@localhost:5672';
+  private db: Pool;
+  private readonly logger = new Logger(PolicyService.name);
 
   constructor(
     @Inject('POLICY_RMQ_CLIENT') private readonly client: ClientProxy,
   ) {}
+
+  onModuleInit() {
+    // Initialize Postgres pool lazily
+    const pgHost = process.env.PGHOST || 'localhost';
+    const pgPort = Number(process.env.PGPORT || 5432);
+    const pgUser = process.env.PGUSER || 'postgres';
+    const pgPass = process.env.PGPASSWORD || 'postgres';
+    const pgDb = process.env.PGDATABASE || 'policydb';
+
+    this.db = new Pool({ host: pgHost, port: pgPort, user: pgUser, password: pgPass, database: pgDb });
+  }
 
   private async rpcCreditCheck(payload: any, timeout = 5000): Promise<any> {
     const conn = await amqp.connect(this.rabbitUrl);
@@ -70,26 +83,61 @@ export class PolicyService {
     // Determine amount. Assume caller provides `amount`; fall back to `premium` or 0.
     const amount = typeof dto.amount === 'number' ? dto.amount : (typeof dto.premium === 'number' ? dto.premium : 0);
 
-    // Publish directly to named queues so they appear in the management UI.
-    // We assert queues first to ensure they exist, then send messages to the default exchange
-    // with routing key equal to the queue name.
-    try {
-      const pubConn = await amqp.connect(this.rabbitUrl);
+    // Persist policy + outbox in a single transaction (insert policy, and insert outbox message)
+    if (!this.db) {
+      // allow tests to create service without DB configured
+      this.logger.warn('DB pool not initialized; skipping DB persistence');
+      // Still publish messages to queues so existing behavior is preserved
       try {
-        const pubCh = await pubConn.createChannel();
-        await pubCh.assertQueue('billing_event', { durable: true });
-        await pubCh.assertQueue('accounting_event', { durable: true });
+        const pubConn = await amqp.connect(this.rabbitUrl);
+        try {
+          const pubCh = await pubConn.createChannel();
+          await pubCh.assertQueue('billing_event', { durable: true });
+          await pubCh.assertQueue('accounting_event', { durable: true });
 
-        pubCh.sendToQueue('billing_event', Buffer.from(JSON.stringify({ policyId, amount })), { persistent: true });
-        pubCh.sendToQueue('accounting_event', Buffer.from(JSON.stringify({ policyId, revenue: amount })), { persistent: true });
+          pubCh.sendToQueue('billing_event', Buffer.from(JSON.stringify({ policyId, amount })), { persistent: true });
+          pubCh.sendToQueue('accounting_event', Buffer.from(JSON.stringify({ policyId, revenue: amount })), { persistent: true });
 
-        await pubCh.close();
-      } finally {
-        await pubConn.close().catch(() => {});
+          await pubCh.close();
+        } finally {
+          await pubConn.close().catch(() => {});
+        }
+      } catch (err) {
+        this.logger.error('Failed to publish to billing/accounting queues', err);
       }
+
+      return { status: 'issued', policyId, ...dto };
+    }
+
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        `INSERT INTO policies(id, holder, amount, data) VALUES($1,$2,$3,$4)`,
+        [policyId, dto.holder ?? null, amount, dto]
+      );
+
+      const outboxPayloadBilling = { policyId, amount };
+      const outboxPayloadAccounting = { policyId, revenue: amount };
+
+      await client.query(
+        `INSERT INTO outbox(aggregate_type, aggregate_id, type, payload) VALUES($1,$2,$3,$4)`,
+        ['policy', policyId, 'billing.event', outboxPayloadBilling]
+      );
+
+      await client.query(
+        `INSERT INTO outbox(aggregate_type, aggregate_id, type, payload) VALUES($1,$2,$3,$4)`,
+        ['policy', policyId, 'accounting.event', outboxPayloadAccounting]
+      );
+
+      await client.query('COMMIT');
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to publish to billing/accounting queues', err);
+      await client.query('ROLLBACK').catch(() => {});
+      this.logger.error('DB transaction failed', err);
+      throw err;
+    } finally {
+      client.release();
     }
 
     return { status: 'issued', policyId, ...dto };
