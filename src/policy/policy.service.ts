@@ -1,9 +1,15 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom } from 'rxjs';
 import * as amqp from 'amqplib';
 
 @Injectable()
 export class PolicyService {
   private rabbitUrl = process.env.RABBIT_URL || 'amqp://admin:admin@localhost:5672';
+
+  constructor(
+    @Inject('POLICY_RMQ_CLIENT') private readonly client: ClientProxy,
+  ) {}
 
   private async rpcCreditCheck(payload: any, timeout = 5000): Promise<any> {
     const conn = await amqp.connect(this.rabbitUrl);
@@ -59,6 +65,33 @@ export class PolicyService {
     if (!creditResponse || creditResponse.approved !== true) {
       throw new BadRequestException('Credit not approved');
     }
-    return { status: 'issued', policyId: Date.now(), ...dto };
+    const policyId = Date.now();
+
+    // Determine amount. Assume caller provides `amount`; fall back to `premium` or 0.
+    const amount = typeof dto.amount === 'number' ? dto.amount : (typeof dto.premium === 'number' ? dto.premium : 0);
+
+    // Publish directly to named queues so they appear in the management UI.
+    // We assert queues first to ensure they exist, then send messages to the default exchange
+    // with routing key equal to the queue name.
+    try {
+      const pubConn = await amqp.connect(this.rabbitUrl);
+      try {
+        const pubCh = await pubConn.createChannel();
+        await pubCh.assertQueue('billing_event', { durable: true });
+        await pubCh.assertQueue('accounting_event', { durable: true });
+
+        pubCh.sendToQueue('billing_event', Buffer.from(JSON.stringify({ policyId, amount })), { persistent: true });
+        pubCh.sendToQueue('accounting_event', Buffer.from(JSON.stringify({ policyId, revenue: amount })), { persistent: true });
+
+        await pubCh.close();
+      } finally {
+        await pubConn.close().catch(() => {});
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to publish to billing/accounting queues', err);
+    }
+
+    return { status: 'issued', policyId, ...dto };
   }
 }
