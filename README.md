@@ -203,12 +203,3 @@ curl -v -H "Content-Type: application/json" -X POST http://localhost:3000/policy
 
 # 3) POST issue com token (substitua <TOKEN> pelo token gerado)
 curl -v -H "Content-Type: application/json" -H "Authorization: Bearer <TOKEN>" -X POST http://localhost:3000/policy/issue -d '{"holder":"Alice","amount":100,"productCode":"FIANCA"}'
-
-
-## Contato / Contribuição
-
-Se quiser contribuir, abra issues e PRs com foco pequeno e testável. Inclua descrições de regressões e cenários de teste.
-
----
-
-Resumo: este README oferece visão de produto e técnica para guiar o desenvolvimento da Plataforma de Emissão. Posso também gerar diagramas, exemplos de mensagens AMQP, ou um template de worker se quiser que eu implemente a próxima etapa.
